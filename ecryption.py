@@ -1,40 +1,50 @@
-# Функция для размножения ключа до длины сообщения
-def extend_key(key, length):
-    repeated_key = (key * (length // len(key) + 1))[:length]
-    return repeated_key
+import os
+import base64
 
-# Функция шифрования шифром Виженера
-def encrypt(key, message):
-    # Размножаем ключ до длины сообщения
-    extended_key = extend_key(key, len(message))
-    # Шифруем каждый символ
-    encrypted_chars = []
-    for m_char, k_char in zip(message, extended_key):
-        encrypted_char = chr((ord(m_char) + ord(k_char)) % 65536)
-        encrypted_chars.append(encrypted_char)
-    return ''.join(encrypted_chars)
+# Функция шифрования с использованием OTP
+def encrypt(message, key):
+    if len(key) != len(message.encode('utf-8')):
+        raise ValueError("Длина ключа должна совпадать с длиной сообщения.")
 
-# Функция дешифрования шифра Виженера
-def decrypt(key, ciphertext):
-    # Размножаем ключ до длины шифротекста
-    extended_key = extend_key(key, len(ciphertext))
-    # Дешифруем каждый символ
-    decrypted_chars = []
-    for c_char, k_char in zip(ciphertext, extended_key):
-        decrypted_char = chr((ord(c_char) - ord(k_char)) % 65536)
-        decrypted_chars.append(decrypted_char)
-    return ''.join(decrypted_chars)
+    # Преобразуем сообщение в байты
+    message_bytes = message.encode('utf-8')
+
+    # Применяем XOR между каждым байтом сообщения и ключа
+    encrypted_bytes = bytes([m ^ k for m, k in zip(message_bytes, key)])
+    return encrypted_bytes
+
+# Функция дешифрования с использованием OTP
+def decrypt(ciphertext, key):
+    if len(key) != len(ciphertext):
+        raise ValueError("Длина ключа должна совпадать с длиной шифротекста.")
+
+    # Применяем XOR между каждым байтом шифротекста и ключа
+    decrypted_bytes = bytes([c ^ k for c, k in zip(ciphertext, key)])
+    # Декодируем байты в строку
+    try:
+        return decrypted_bytes.decode('utf-8')
+    except UnicodeDecodeError:
+        raise ValueError("Не удалось декодировать расшифрованный текст. Возможно, ключ или шифротекст повреждены.")
 
 # Основная часть программы
 if __name__ == "__main__":
-    # Запрашиваем у пользователя ключ и текст для шифрования
-    key = input("Введите ключ для шифрования (строка): ")
+    # Запрашиваем у пользователя текст для шифрования
     message = input("Введите текст для шифрования: ")
 
+    # Преобразуем сообщение в байты
+    message_bytes = message.encode('utf-8')
+
+    # Генерируем ключ той же длины, что и байтовое представление сообщения
+    key = os.urandom(len(message_bytes))
+    print("\nСгенерированный ключ (в Base64):\n", base64.b64encode(key).decode('utf-8'))
+
     # Шифруем текст
-    encrypted_text = encrypt(key, message)
-    print("\nЗашифрованный текст:\n", encrypted_text)
+    encrypted_bytes = encrypt(message, key)
+    print("\nЗашифрованный текст (в Base64):\n", base64.b64encode(encrypted_bytes).decode('utf-8'))
 
     # Дешифруем текст
-    decrypted_text = decrypt(key, encrypted_text)
-    print("\nРасшифрованный текст:\n", decrypted_text)
+    try:
+        decrypted_text = decrypt(encrypted_bytes, key)
+        print("\nРасшифрованный текст:\n", decrypted_text)
+    except ValueError as e:
+        print("\nОшибка при расшифровке текста:\n", e)
