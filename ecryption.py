@@ -1,50 +1,120 @@
 import os
 import base64
 
-# Функция шифрования с использованием OTP
-def encrypt(message, key):
-    if len(key) != len(message.encode('utf-8')):
-        raise ValueError("Длина ключа должна совпадать с длиной сообщения.")
+# Функция для добавления PKCS#7 паддинга
+def pkcs7_padding(data, block_size):
+    pad_len = block_size - (len(data) % block_size)
+    padding = bytes([pad_len] * pad_len)
+    return data + padding
+
+# Функция для удаления PKCS#7 паддинга
+def pkcs7_unpadding(data):
+    pad_len = data[-1]
+    return data[:-pad_len]
+
+# Функция шифрования с использованием шифра Виженера в режиме CBC
+def encrypt(key, message):
+    if not isinstance(key, bytes):
+        raise TypeError("Ключ должен быть в байтовом формате.")
+    block_size = len(key)
 
     # Преобразуем сообщение в байты
     message_bytes = message.encode('utf-8')
 
-    # Применяем XOR между каждым байтом сообщения и ключа
-    encrypted_bytes = bytes([m ^ k for m, k in zip(message_bytes, key)])
-    return encrypted_bytes
+    # Добавляем PKCS#7 паддинг
+    message_bytes = pkcs7_padding(message_bytes, block_size)
 
-# Функция дешифрования с использованием OTP
-def decrypt(ciphertext, key):
-    if len(key) != len(ciphertext):
-        raise ValueError("Длина ключа должна совпадать с длиной шифротекста.")
+    num_blocks = len(message_bytes) // block_size
 
-    # Применяем XOR между каждым байтом шифротекста и ключа
-    decrypted_bytes = bytes([c ^ k for c, k in zip(ciphertext, key)])
-    # Декодируем байты в строку
+    # Генерируем случайный IV
+    iv = os.urandom(block_size)
+
+    # Инициализируем предыдущий шифроблок IV
+    prev_cipher_block = iv
+
+    ciphertext_blocks = []
+
+    for i in range(num_blocks):
+        block_start = i * block_size
+        block_end = block_start + block_size
+        plaintext_block = message_bytes[block_start:block_end]
+
+        # Xi = Pi XOR Ci-1
+        x_i = bytes([pb ^ cb for pb, cb in zip(plaintext_block, prev_cipher_block)])
+
+        # Ci = (Xi + K) mod 256
+        cipher_block = bytes([(xb + kb) % 256 for xb, kb in zip(x_i, key)])
+
+        # Добавляем шифроблок в список
+        ciphertext_blocks.append(cipher_block)
+
+        # Обновляем предыдущий шифроблок
+        prev_cipher_block = cipher_block
+
+    # Соединяем IV и шифроблоки
+    ciphertext = iv + b''.join(ciphertext_blocks)
+
+    # Возвращаем шифротекст в виде строки Base64
+    return base64.b64encode(ciphertext).decode('utf-8')
+
+# Функция дешифрования с использованием шифра Виженера в режиме CBC
+def decrypt(key, b64_ciphertext):
+    # Декодируем Base64, чтобы получить байтовый шифротекст
+    ciphertext = base64.b64decode(b64_ciphertext)
+
+    if not isinstance(key, bytes):
+        raise TypeError("Ключ должен быть в байтовом формате.")
+    block_size = len(key)
+
+    # Извлекаем IV
+    iv = ciphertext[:block_size]
+    ciphertext_blocks = [ciphertext[i:i+block_size] for i in range(block_size, len(ciphertext), block_size)]
+
+    num_blocks = len(ciphertext_blocks)
+
+    # Инициализируем предыдущий шифроблок IV
+    prev_cipher_block = iv
+
+    plaintext_blocks = []
+
+    for i in range(num_blocks):
+        cipher_block = ciphertext_blocks[i]
+
+        # Xi = (Ci - K) mod 256
+        x_i = bytes([(cb - kb) % 256 for cb, kb in zip(cipher_block, key)])
+
+        # Pi = Xi XOR Ci-1
+        plaintext_block = bytes([xb ^ pcb for xb, pcb in zip(x_i, prev_cipher_block)])
+
+        plaintext_blocks.append(plaintext_block)
+
+        # Обновляем предыдущий шифроблок
+        prev_cipher_block = cipher_block
+
+    # Соединяем блоки с расшифрованным текстом
+    plaintext_bytes = b''.join(plaintext_blocks)
+
+    # Убираем PKCS#7 паддинг
     try:
-        return decrypted_bytes.decode('utf-8')
-    except UnicodeDecodeError:
-        raise ValueError("Не удалось декодировать расшифрованный текст. Возможно, ключ или шифротекст повреждены.")
+        plaintext_bytes = pkcs7_unpadding(plaintext_bytes)
+    except Exception:
+        raise ValueError("Ошибка при удалении паддинга. Возможно, неверный ключ или поврежден шифротекст.")
+
+    # Преобразуем байты в строку
+    return plaintext_bytes.decode('utf-8')
 
 # Основная часть программы
 if __name__ == "__main__":
-    # Запрашиваем у пользователя текст для шифрования
+    # Ввод ключа и сообщения
+    key_input = input("Введите ключ для шифрования: ")
+    key_bytes = key_input.encode('utf-8')
+
     message = input("Введите текст для шифрования: ")
 
-    # Преобразуем сообщение в байты
-    message_bytes = message.encode('utf-8')
+    # Шифрование
+    encrypted = encrypt(key_bytes, message)
+    print("\nЗашифрованный текст (Base64):\n", encrypted)
 
-    # Генерируем ключ той же длины, что и байтовое представление сообщения
-    key = os.urandom(len(message_bytes))
-    print("\nСгенерированный ключ (в Base64):\n", base64.b64encode(key).decode('utf-8'))
-
-    # Шифруем текст
-    encrypted_bytes = encrypt(message, key)
-    print("\nЗашифрованный текст (в Base64):\n", base64.b64encode(encrypted_bytes).decode('utf-8'))
-
-    # Дешифруем текст
-    try:
-        decrypted_text = decrypt(encrypted_bytes, key)
-        print("\nРасшифрованный текст:\n", decrypted_text)
-    except ValueError as e:
-        print("\nОшибка при расшифровке текста:\n", e)
+    # Дешифрование
+    decrypted = decrypt(key_bytes, encrypted)
+    print("\nРасшифрованный текст:\n", decrypted)
