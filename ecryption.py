@@ -1,44 +1,40 @@
-# Функция шифрования обобщенным шифром Цезаря
-def encrypt(k, m):
-    return ''.join(map(chr, [(ord(c) + k) % 65536 for c in m]))
+# Функция для размножения ключа до длины сообщения
+def extend_key(key, length):
+    repeated_key = (key * (length // len(key) + 1))[:length]
+    return repeated_key
 
-# Функция дешифрования обобщенным шифром Цезаря
-def decrypt(k, m):
-    return ''.join(map(chr, [(ord(c) - k) % 65536 for c in m]))
+# Функция шифрования шифром Виженера
+def encrypt(key, message):
+    # Размножаем ключ до длины сообщения
+    extended_key = extend_key(key, len(message))
+    # Шифруем каждый символ
+    encrypted_chars = []
+    for m_char, k_char in zip(message, extended_key):
+        encrypted_char = chr((ord(m_char) + ord(k_char)) % 65536)
+        encrypted_chars.append(encrypted_char)
+    return ''.join(encrypted_chars)
 
-# Функция взлома шифра Цезаря с использованием частотного анализа
-def break_cipher(text):
-    from collections import Counter
-
-    # Находим самый часто встречающийся символ в шифротексте
-    counter = Counter(text)
-    most_common_char, _ = counter.most_common(1)[0]
-
-    # Код символа самого частого символа в шифротексте
-    cipher_most_common_code = ord(most_common_char)
-
-    # Код символа пробела
-    space_code = ord(' ')
-
-    # Вычисляем предполагаемый ключ
-    key = (cipher_most_common_code - space_code) % 65536
-
-    # Дешифруем текст с найденным ключом
-    decrypted_text = decrypt(key, text)
-
-    return decrypted_text, key
+# Функция дешифрования шифра Виженера
+def decrypt(key, ciphertext):
+    # Размножаем ключ до длины шифротекста
+    extended_key = extend_key(key, len(ciphertext))
+    # Дешифруем каждый символ
+    decrypted_chars = []
+    for c_char, k_char in zip(ciphertext, extended_key):
+        decrypted_char = chr((ord(c_char) - ord(k_char)) % 65536)
+        decrypted_chars.append(decrypted_char)
+    return ''.join(decrypted_chars)
 
 # Основная часть программы
 if __name__ == "__main__":
     # Запрашиваем у пользователя ключ и текст для шифрования
-    key = int(input("Введите ключ для шифрования (целое число): "))
-    plain_text = input("Введите текст для шифрования: ")
+    key = input("Введите ключ для шифрования (строка): ")
+    message = input("Введите текст для шифрования: ")
 
     # Шифруем текст
-    encrypted_text = encrypt(key, plain_text)
+    encrypted_text = encrypt(key, message)
     print("\nЗашифрованный текст:\n", encrypted_text)
 
-    # Взламываем шифр без знания ключа
-    recovered_text, recovered_key = break_cipher(encrypted_text)
-    print("\nВосстановленный текст без знания ключа:\n", recovered_text)
-    print("\nНайденный ключ:", recovered_key)
+    # Дешифруем текст
+    decrypted_text = decrypt(key, encrypted_text)
+    print("\nРасшифрованный текст:\n", decrypted_text)
